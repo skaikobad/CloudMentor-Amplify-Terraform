@@ -1,7 +1,7 @@
 variable "aws_region" {
   description = "AWS region to deploy CloudMentor into."
   type        = string
-  default     = "ap-southeast-1"
+  default     = "us-west-2"
 }
 
 variable "stack_name" {

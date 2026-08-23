@@ -1,8 +1,8 @@
 name: Deploy CloudMentor Production
 
 on:
-  #push:
-    #branches: ["main"]
+  push:
+    branches: ["main"]
   workflow_dispatch:
 
 permissions:
@@ -120,18 +120,18 @@ jobs:
       # you connect the repo; this step is only useful for forcing a fresh
       # Amplify build after a backend-only redeploy (e.g. after rotating
       # CORS_ORIGIN) with no new commit to trigger Amplify automatically.
-      - name: Trigger Amplify frontend build (optional)
-        if: ${{ secrets.AMPLIFY_APP_ID != '' }}
-        env:
-          AMPLIFY_APP_ID: ${{ secrets.AMPLIFY_APP_ID }}
-          AMPLIFY_BRANCH: ${{ secrets.AMPLIFY_BRANCH }}
-        run: |
-          set -euo pipefail
-          BRANCH="${AMPLIFY_BRANCH:-main}"
-          aws amplify start-job \
-            --app-id "$AMPLIFY_APP_ID" \
-            --branch-name "$BRANCH" \
-            --job-type RELEASE
+      # - name: Trigger Amplify frontend build (optional)
+      #   if: ${{ secrets.AMPLIFY_APP_ID != '' }}
+      #   env:
+      #     AMPLIFY_APP_ID: ${{ secrets.AMPLIFY_APP_ID }}
+      #     AMPLIFY_BRANCH: ${{ secrets.AMPLIFY_BRANCH }}
+      #   run: |
+      #     set -euo pipefail
+      #     BRANCH="${AMPLIFY_BRANCH:-main}"
+      #     aws amplify start-job \
+      #       --app-id "$AMPLIFY_APP_ID" \
+      #       --branch-name "$BRANCH" \
+      #       --job-type RELEASE
 
       - name: Deployment summary
         run: |
