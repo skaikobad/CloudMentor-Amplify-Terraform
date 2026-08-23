@@ -1,0 +1,13 @@
+{
+  "version": "2.0",
+  "routeKey": "POST /upload-url",
+  "rawPath": "/upload-url",
+  "requestContext": {
+    "http": {
+      "method": "POST",
+      "path": "/upload-url"
+    }
+  },
+  "body": "{\"fileName\":\"devops-notes.txt\",\"contentType\":\"text/plain\",\"size\":120}",
+  "isBase64Encoded": false
+}

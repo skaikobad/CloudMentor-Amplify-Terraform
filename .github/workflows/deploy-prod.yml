@@ -1,0 +1,141 @@
+name: Deploy CloudMentor Production
+
+on:
+  #push:
+    #branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy Lambda backend (Terraform)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: Validate required secrets
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          STACK_NAME: ${{ secrets.STACK_NAME }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          TF_STATE_LOCK_TABLE: ${{ secrets.TF_STATE_LOCK_TABLE }}
+          AI_MODE: ${{ secrets.AI_MODE }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          set -euo pipefail
+          : "${AWS_REGION:?Missing AWS_REGION secret}"
+          : "${STACK_NAME:?Missing STACK_NAME secret}"
+          : "${TF_STATE_BUCKET:?Missing TF_STATE_BUCKET secret. Run scripts/create-tf-state-backend.sh once and store the result.}"
+          : "${TF_STATE_LOCK_TABLE:?Missing TF_STATE_LOCK_TABLE secret. Run scripts/create-tf-state-backend.sh once and store the result.}"
+
+          MODE="${AI_MODE:-openai}"
+          if [ "$MODE" != "mock" ] && [ -z "${OPENAI_API_KEY:-}" ]; then
+            echo "OPENAI_API_KEY is required when AI_MODE is openai. Use AI_MODE=mock for a no-billing demo deployment."
+            exit 1
+          fi
+
+      - name: Terraform init
+        working-directory: terraform
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          TF_STATE_KEY: ${{ secrets.TF_STATE_KEY }}
+          TF_STATE_LOCK_TABLE: ${{ secrets.TF_STATE_LOCK_TABLE }}
+        run: |
+          set -euo pipefail
+          terraform init \
+            -backend-config="bucket=$TF_STATE_BUCKET" \
+            -backend-config="key=${TF_STATE_KEY:-cloudmentor/terraform.tfstate}" \
+            -backend-config="region=$AWS_REGION" \
+            -backend-config="dynamodb_table=$TF_STATE_LOCK_TABLE"
+
+      - name: Terraform apply (deploy backend)
+        id: tf_apply
+        working-directory: terraform
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          STACK_NAME: ${{ secrets.STACK_NAME }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+          AI_MODE: ${{ secrets.AI_MODE }}
+          CORS_ORIGIN: ${{ secrets.CORS_ORIGIN }}
+        run: |
+          set -euo pipefail
+
+          MODEL_VALUE="${OPENAI_MODEL:-gpt-4.1-mini}"
+          MODE_VALUE="${AI_MODE:-openai}"
+          KEY_VALUE="${OPENAI_API_KEY:-mock-placeholder-no-openai-key}"
+          # Falls back to * only if CORS_ORIGIN was never set. Once the
+          # Amplify app exists, set CORS_ORIGIN to its https:// URL.
+          CORS_VALUE="${CORS_ORIGIN:-*}"
+
+          terraform apply -auto-approve \
+            -var="aws_region=$AWS_REGION" \
+            -var="stack_name=$STACK_NAME" \
+            -var="openai_api_key=$KEY_VALUE" \
+            -var="openai_model=$MODEL_VALUE" \
+            -var="ai_mode=$MODE_VALUE" \
+            -var="cors_origin=$CORS_VALUE"
+
+          echo "api_base_url=$(terraform output -raw api_base_url)" >> "$GITHUB_OUTPUT"
+          echo "table_name=$(terraform output -raw table_name)" >> "$GITHUB_OUTPUT"
+          echo "materials_bucket=$(terraform output -raw materials_bucket_name)" >> "$GITHUB_OUTPUT"
+
+      - name: Read backend outputs
+        id: backend_outputs
+        run: |
+          set -euo pipefail
+          echo "Backend API: ${{ steps.tf_apply.outputs.api_base_url }}"
+          echo "DynamoDB table: ${{ steps.tf_apply.outputs.table_name }}"
+          echo "S3 bucket: ${{ steps.tf_apply.outputs.materials_bucket }}"
+          echo "api_base_url=${{ steps.tf_apply.outputs.api_base_url }}" >> "$GITHUB_OUTPUT"
+          echo "table_name=${{ steps.tf_apply.outputs.table_name }}" >> "$GITHUB_OUTPUT"
+          echo "materials_bucket=${{ steps.tf_apply.outputs.materials_bucket }}" >> "$GITHUB_OUTPUT"
+
+      # Optional: only runs once the Amplify app exists and its ID has been
+      # stored as the AMPLIFY_APP_ID GitHub secret (see README section
+      # "Create the AWS Amplify app"). Pushing to `main` already triggers an
+      # Amplify build on its own via the GitHub webhook Amplify installs when
+      # you connect the repo; this step is only useful for forcing a fresh
+      # Amplify build after a backend-only redeploy (e.g. after rotating
+      # CORS_ORIGIN) with no new commit to trigger Amplify automatically.
+      - name: Trigger Amplify frontend build (optional)
+        if: ${{ secrets.AMPLIFY_APP_ID != '' }}
+        env:
+          AMPLIFY_APP_ID: ${{ secrets.AMPLIFY_APP_ID }}
+          AMPLIFY_BRANCH: ${{ secrets.AMPLIFY_BRANCH }}
+        run: |
+          set -euo pipefail
+          BRANCH="${AMPLIFY_BRANCH:-main}"
+          aws amplify start-job \
+            --app-id "$AMPLIFY_APP_ID" \
+            --branch-name "$BRANCH" \
+            --job-type RELEASE
+
+      - name: Deployment summary
+        run: |
+          echo "CloudMentor backend:  ${{ steps.backend_outputs.outputs.api_base_url }}"
+          echo "S3 bucket:            ${{ steps.backend_outputs.outputs.materials_bucket }}"
+          echo "DynamoDB table:       ${{ steps.backend_outputs.outputs.table_name }}"
+          echo "CloudMentor frontend: check the AWS Amplify Console for your app's domain (https://<branch>.<app-id>.amplifyapp.com)"

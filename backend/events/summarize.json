@@ -1,0 +1,13 @@
+{
+  "version": "2.0",
+  "routeKey": "POST /summarize",
+  "rawPath": "/summarize",
+  "requestContext": {
+    "http": {
+      "method": "POST",
+      "path": "/summarize"
+    }
+  },
+  "body": "{\"notes\":\"Docker packages apps in containers. Kubernetes orchestrates containers across a cluster. CI/CD automates build, test, and deployment.\",\"level\":\"beginner\"}",
+  "isBase64Encoded": false
+}

@@ -1,0 +1,74 @@
+# --------------------------------------------------
+# CloudMentor .gitignore
+# Keep source code and example files, exclude secrets,
+# local builds, dependencies, logs, and deployment state.
+# --------------------------------------------------
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Frontend environment files
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+!frontend/.env*.example
+
+# Backend local/SAM environment files containing secrets
+backend/env.json
+backend/env.*.json
+!backend/env.*.example.json
+
+# Root environment files
+.env
+.env.*
+!.env.example
+!.env*.example
+
+# npm/yarn/pnpm logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# Frontend build output
+frontend/dist/
+frontend/build/
+dist/
+build/
+
+# Terraform local state, cache, and packaged Lambda artifacts
+terraform/.terraform/
+terraform/build/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/*.tfvars
+!terraform/*.tfvars.example
+terraform/crash.log
+terraform/crash.*.log
+terraform/override.tf
+terraform/override.tf.json
+terraform/*_override.tf
+terraform/*_override.tf.json
+# Keep the dependency lock file committed for reproducible providers
+!terraform/.terraform.lock.hcl
+
+# Test/coverage artifacts
+coverage/
+.nyc_output/
+
+# Local upload/temp artifacts
+uploads/
+tmp/
+temp/
+*.tmp
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Generated archives
+*.zip

@@ -1,0 +1,9 @@
+# Copy to terraform.tfvars for local runs (terraform.tfvars is gitignored).
+# In CI, these are passed via -var flags from GitHub Actions secrets instead.
+
+aws_region     = "ap-southeast-1"
+stack_name     = "cloudmentor-prod"
+openai_api_key = "sk-proj-your-real-key-or-leave-placeholder-for-mock"
+openai_model   = "gpt-4.1-mini"
+ai_mode        = "mock" # "openai" or "mock"
+cors_origin    = "https://main.YOUR_AMPLIFY_APP_ID.amplifyapp.com"
