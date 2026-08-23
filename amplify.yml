@@ -1,3 +1,4 @@
+# Add comment to amplify.yml
 version: 1
 applications:
   - appRoot: frontend
