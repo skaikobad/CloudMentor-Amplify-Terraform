@@ -1,15 +1,11 @@
 # bootstrap/main.tf
 # This creates the S3 bucket and DynamoDB table for our state backend
 # IMPORTANT: This bootstrap config uses LOCAL state
- 
-# Random suffix to make bucket name globally unique
-resource "random_id" "suffix" {
-  byte_length = 4
-}
+
  
 # S3 Bucket for Terraform State
 resource "aws_s3_bucket" "terraform_state" {
-  bucket = "terraform-state-${random_id.suffix.hex}"
+  bucket = "terraform-state-cloudmentor-skaikobad"
  
   tags = {
     Name    = "Terraform State Bucket"
