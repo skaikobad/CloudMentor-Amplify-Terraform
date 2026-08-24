@@ -330,7 +330,7 @@ async function callOpenAI(prompt) {
     throw new HttpError(400, 'OPENAI_API_KEY is missing or still uses a placeholder value. For free local classroom testing, set AI_MODE=mock in backend/env.json. For real AI output, add a valid OpenAI API key.');
   }
 
-  const apiResponse = await fetch('https://api.openai.com/v1/responses', {
+  const apiResponse = await fetch('https://api.groq.com/openai/v1/responses', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

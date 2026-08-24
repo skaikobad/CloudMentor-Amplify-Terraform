@@ -7,9 +7,10 @@
 # remote state.
 #
 # Location: scripts/bootstrap-remote-state.sh
-# Usage:    ./scripts/bootstrap-remote-state.sh [-y]
+# Usage:    ./scripts/bootstrap-remote-state.sh
 #
-#   -y    Auto-approve the apply (skips the interactive confirmation)
+# NOTE: terraform apply always runs with -auto-approve — no interactive
+# confirmation prompt. Make sure you trust bootstrap/*.tf before running.
 
 set -euo pipefail
 
@@ -31,17 +32,6 @@ NC='\033[0m'
 info()  { echo -e "${GREEN}[INFO]${NC} $1"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1" >&2; }
-
-# ---------------------------------------------------------------------------
-# Parse flags
-# ---------------------------------------------------------------------------
-AUTO_APPROVE=false
-while getopts ":y" opt; do
-  case "${opt}" in
-    y) AUTO_APPROVE=true ;;
-    *) error "Usage: $0 [-y]"; exit 1 ;;
-  esac
-done
 
 # ---------------------------------------------------------------------------
 # Pre-flight checks
@@ -75,13 +65,8 @@ terraform init
 info "Running terraform validate..."
 terraform validate
 
-if [ "${AUTO_APPROVE}" = true ]; then
-  info "Running terraform apply (auto-approved)..."
-  terraform apply -auto-approve
-else
-  info "Running terraform apply (interactive — review the plan and confirm)..."
-  terraform apply
-fi
+info "Running terraform apply (auto-approved)..."
+terraform apply -auto-approve
 
 info "Bootstrap complete. Outputs:"
 terraform output
