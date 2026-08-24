@@ -67,6 +67,3 @@ terraform validate
 
 info "Running terraform apply (auto-approved)..."
 terraform apply -auto-approve
-
-info "Bootstrap complete. Outputs:"
-terraform output
