@@ -81,6 +81,10 @@ Important: **Amplify only builds and serves the frontend.** It never runs the ba
 cloudmentor-serverless-prod/
 ├── .github/workflows/deploy-prod.yml
 ├── amplify.yml
+├── bootstrap/
+│   ├── provider.tf
+│   ├── main.tf
+│   └── output.tf
 ├── terraform/
 │   ├── versions.tf
 │   ├── variables.tf
@@ -104,11 +108,13 @@ cloudmentor-serverless-prod/
 │   ├── package.json
 │   └── src/
 ├── scripts/
-│   └── create-tf-state-backend.sh
+│   └── bootstrap-remote-state.sh
 └── README.md
 ```
 
 `amplify.yml` at the repo root tells Amplify this is a monorepo and that the React app lives under `frontend/` — see step 10.
+
+`bootstrap/` is its own small, self-contained Terraform config (with its own provider and **local** state — it can't store its state in the S3 bucket it's about to create). It exists only to stand up the S3 bucket + DynamoDB table that the main `terraform/` config then uses as its **remote** state backend. `scripts/bootstrap-remote-state.sh` is a thin wrapper that runs `terraform init` / `terraform validate` / `terraform apply` against `bootstrap/` — see step 5.
 
 ---
 
@@ -128,18 +134,54 @@ Use `AI_MODE=mock` if you want to deploy the app without OpenAI billing while te
 ## 5. One-time: create the Terraform state backend
 
 Terraform needs somewhere durable to store its state between GitHub Actions
-runs (the runner itself is thrown away after every job). Run this once per
-AWS account/region, from your own machine with the AWS CLI configured:
+runs (the runner itself is thrown away after every job). This bucket +
+lock table are no longer created by a standalone AWS CLI script — they're
+now defined as real Terraform resources in `bootstrap/`, and a small bash
+script just drives that config for you.
+
+Run this once per AWS account/region, from your own machine with the AWS
+CLI and Terraform installed and credentials configured:
 
 ```bash
-AWS_REGION=ap-southeast-1 \
-TF_STATE_BUCKET=cloudmentor-tfstate-yourname \
-TF_STATE_LOCK_TABLE=cloudmentor-tf-locks \
-./scripts/create-tf-state-backend.sh
+./scripts/bootstrap-remote-state.sh
 ```
 
-Keep the printed `TF_STATE_BUCKET`, `TF_STATE_KEY`, and `TF_STATE_LOCK_TABLE`
-values — they go into GitHub secrets in step 7.
+The script:
+
+```text
+1. Checks that terraform and the AWS CLI are available and that your
+   AWS credentials are valid
+2. cd's into bootstrap/
+3. Runs `terraform init`, `terraform validate`, and
+   `terraform apply -auto-approve` (no interactive confirmation prompt —
+   review bootstrap/*.tf before running)
+```
+
+This creates:
+
+```text
+S3 bucket:      terraform-state-cloudmentor-skaikobad  (versioned, encrypted,
+                 all public access blocked)
+DynamoDB table: terraform-state-locks  (PAY_PER_REQUEST, used for state locking)
+Region:         us-west-2 (set in bootstrap/provider.tf)
+```
+
+The bucket name, table name, and region are fixed values in
+`bootstrap/main.tf` / `bootstrap/provider.tf` rather than parameters — edit
+those files directly if you need different names. `bootstrap/` intentionally
+keeps its own **local** Terraform state (it can't store its state in the
+bucket it's still creating), so run the script from the same machine if you
+ever need to change or destroy these resources later (see step 15).
+
+After it finishes, read the values you'll need for GitHub secrets in step 7:
+
+```bash
+cd bootstrap
+terraform output
+```
+
+This prints `TF_STATE_BUCKET`, `TF_STATE_KEY`, and `TF_STATE_LOCK_TABLE` —
+keep them, they go into GitHub secrets in step 7.
 
 ---
 
@@ -549,12 +591,21 @@ Do this when you are done teaching/demoing so nothing keeps billing.
 
    If the S3 materials bucket has uploaded files in it, `terraform destroy` will fail to delete it until the bucket is empty — empty it first with `aws s3 rm s3://BUCKET_NAME --recursive`, then re-run `terraform destroy`.
 
-3. **Remove the Terraform state backend itself**, if you no longer need it (the state bucket and lock table created by `scripts/create-tf-state-backend.sh` in step 5). Delete these manually last, since Terraform can't destroy the backend it's currently using to store its own state:
+3. **Remove the Terraform state backend itself**, if you no longer need it (the state bucket and lock table created by `scripts/bootstrap-remote-state.sh` / `bootstrap/` in step 5). Delete these manually last, since Terraform can't destroy the backend it's currently using to store its own state.
+
+   Since `bootstrap/` keeps its own local state file, the cleanest way is to destroy it from the same machine (and same `bootstrap/` checkout) you ran it from in step 5:
 
    ```bash
-   aws s3 rm s3://$TF_STATE_BUCKET --recursive
-   aws s3api delete-bucket --bucket $TF_STATE_BUCKET --region $AWS_REGION
-   aws dynamodb delete-table --table-name $TF_STATE_LOCK_TABLE --region $AWS_REGION
+   cd bootstrap
+   terraform destroy -auto-approve
+   ```
+
+   If that local state is no longer available, fall back to deleting the resources directly with the AWS CLI:
+
+   ```bash
+   aws s3 rm s3://terraform-state-cloudmentor-skaikobad --recursive
+   aws s3api delete-bucket --bucket terraform-state-cloudmentor-skaikobad --region us-west-2
+   aws dynamodb delete-table --table-name terraform-state-locks --region us-west-2
    ```
 
 4. **Revoke the IAM user's access keys** (or delete the IAM user) that GitHub Actions was using, and remove the corresponding GitHub repository secrets so no stale credentials remain in the repo settings.

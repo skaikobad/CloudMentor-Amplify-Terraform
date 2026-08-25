@@ -46,8 +46,8 @@ jobs:
           set -euo pipefail
           : "${AWS_REGION:?Missing AWS_REGION secret}"
           : "${STACK_NAME:?Missing STACK_NAME secret}"
-          : "${TF_STATE_BUCKET:?Missing TF_STATE_BUCKET secret. Run scripts/create-tf-state-backend.sh once and store the result.}"
-          : "${TF_STATE_LOCK_TABLE:?Missing TF_STATE_LOCK_TABLE secret. Run scripts/create-tf-state-backend.sh once and store the result.}"
+          : "${TF_STATE_BUCKET:?Missing TF_STATE_BUCKET secret. Run scripts/bootstrap-remote-state.sh once and store the result.}"
+          : "${TF_STATE_LOCK_TABLE:?Missing TF_STATE_LOCK_TABLE secret. Run scripts/bootstrap-remote-state.sh once and store the result.}"
 
           MODE="${AI_MODE:-openai}"
           if [ "$MODE" != "mock" ] && [ -z "${OPENAI_API_KEY:-}" ]; then
