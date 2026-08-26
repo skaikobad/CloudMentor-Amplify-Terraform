@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Checkout the repository. This step is required to access the Terraform configuration files.
       - name: Checkout repository
         uses: actions/checkout@v4
 
