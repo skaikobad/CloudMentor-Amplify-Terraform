@@ -1,14 +1,19 @@
 name: Deploy CloudMentor Production
 
+# When Does It Run?
+# Automatically whenever someone pushes to main
+# Manually — you can click a button in GitHub to run it anytime
 on:
   push:
     branches: ["main"]
   workflow_dispatch:
 
+# It only has read permission on the repo contents (safe, minimal permissions)
 permissions:
   contents: read
 
 jobs:
+  # The Single Job: deploy
   deploy:
     name: Deploy Lambda backend (Terraform)
     runs-on: ubuntu-latest
@@ -18,7 +23,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Set up Node.js environment for building the frontend. This step is required to run npm commands.
+      # Set up Node.js environment. This step is required to run npm commands.
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -32,11 +37,14 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
+      # Set up Terraform. This step installs the specified version of Terraform.
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.9.8"
 
+      # A safety check. It makes sure critical secrets exist
+      # If any of these secrets are missing, the workflow will fail early with a clear error message.
       - name: Validate required secrets
         env:
           AWS_REGION: ${{ secrets.AWS_REGION }}
@@ -58,6 +66,9 @@ jobs:
             exit 1
           fi
 
+      # Initializes Terraform with a remote backend
+      # State is stored in an S3 bucket (so multiple runs share the same state)
+      # A DynamoDB table is used for locking (prevents two deploys from clashing) 
       - name: Terraform init
         working-directory: terraform
         env:
@@ -73,6 +84,8 @@ jobs:
             -backend-config="region=$AWS_REGION" \
             -backend-config="dynamodb_table=$TF_STATE_LOCK_TABLE"
 
+      # Actually creates/updates AWS resources
+      # Then it reads Terraform outputs and saves them for later steps
       - name: Terraform apply (deploy backend)
         id: tf_apply
         working-directory: terraform
@@ -105,6 +118,7 @@ jobs:
           echo "table_name=$(terraform output -raw table_name)" >> "$GITHUB_OUTPUT"
           echo "materials_bucket=$(terraform output -raw materials_bucket_name)" >> "$GITHUB_OUTPUT"
 
+      # Just prints the outputs to the log and re-exports them (so later steps can use them via steps.backend_outputs.outputs.*)
       - name: Read backend outputs
         id: backend_outputs
         run: |
@@ -116,26 +130,7 @@ jobs:
           echo "table_name=${{ steps.tf_apply.outputs.table_name }}" >> "$GITHUB_OUTPUT"
           echo "materials_bucket=${{ steps.tf_apply.outputs.materials_bucket }}" >> "$GITHUB_OUTPUT"
 
-      # Optional: only runs once the Amplify app exists and its ID has been
-      # stored as the AMPLIFY_APP_ID GitHub secret (see README section
-      # "Create the AWS Amplify app"). Pushing to `main` already triggers an
-      # Amplify build on its own via the GitHub webhook Amplify installs when
-      # you connect the repo; this step is only useful for forcing a fresh
-      # Amplify build after a backend-only redeploy (e.g. after rotating
-      # CORS_ORIGIN) with no new commit to trigger Amplify automatically.
-      # - name: Trigger Amplify frontend build (optional)
-      #   if: ${{ secrets.AMPLIFY_APP_ID != '' }}
-      #   env:
-      #     AMPLIFY_APP_ID: ${{ secrets.AMPLIFY_APP_ID }}
-      #     AMPLIFY_BRANCH: ${{ secrets.AMPLIFY_BRANCH }}
-      #   run: |
-      #     set -euo pipefail
-      #     BRANCH="${AMPLIFY_BRANCH:-main}"
-      #     aws amplify start-job \
-      #       --app-id "$AMPLIFY_APP_ID" \
-      #       --branch-name "$BRANCH" \
-      #       --job-type RELEASE
-
+      # Finally, print a summary of the deployment outputs for easy reference.   
       - name: Deployment summary
         run: |
           echo "CloudMentor backend:  ${{ steps.backend_outputs.outputs.api_base_url }}"
