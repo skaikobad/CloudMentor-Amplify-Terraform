@@ -10,6 +10,9 @@ resource "null_resource" "npm_install" {
     package_lock_hash = fileexists("${path.module}/../backend/package-lock.json") ? filesha256("${path.module}/../backend/package-lock.json") : filesha256("${path.module}/../backend/package.json")
   }
 
+# Terraform runs npm install locally on the GitHub runner (not on AWS)
+# This installs the backend's production dependencies into backend/node_modules
+# Then archive_file.lambda_zip zips up backend/ (including node_modules) into the Lambda deployment package
   provisioner "local-exec" {
     working_dir = "${path.module}/../backend"
     command     = "npm install --omit=dev --no-audit --no-fund"
@@ -40,6 +43,8 @@ data "archive_file" "lambda_zip" {
 # deploy time. Terraform has no equivalent shortcut, so we recreate the same
 # effective permissions explicitly.
 # -----------------------------------------------------------------------------
+
+# Define trust policy --> Who can assume the role --> The Lambda service.
 data "aws_iam_policy_document" "lambda_assume_role" {
   statement {
     actions = ["sts:AssumeRole"]
@@ -50,16 +55,20 @@ data "aws_iam_policy_document" "lambda_assume_role" {
   }
 }
 
+# Create the IAM role and attach the trust policy.
 resource "aws_iam_role" "lambda_exec" {
   name               = "${local.function_name}-role"
   assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
 }
 
+# Attach basic Lambda permissions (CloudWatch Logs) to the role.
 resource "aws_iam_role_policy_attachment" "lambda_basic_execution" {
   role       = aws_iam_role.lambda_exec.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+# Define an inline policy allowing CRUD + Query + Scan + Batch operations on DybamoDB table
+# Restrict the policy to the specific table and its indexes.
 data "aws_iam_policy_document" "lambda_dynamodb_crud" {
   statement {
     sid = "DynamoDbCrud"
@@ -82,12 +91,15 @@ data "aws_iam_policy_document" "lambda_dynamodb_crud" {
   }
 }
 
+# Attach the inline policy to the Lambda's IAM role.
 resource "aws_iam_role_policy" "lambda_dynamodb_crud" {
   name   = "${local.function_name}-dynamodb-crud"
   role   = aws_iam_role.lambda_exec.id
   policy = data.aws_iam_policy_document.lambda_dynamodb_crud.json
 }
 
+# Define an inline policy allowing CRUD operations on the S3 bucket
+# Restrict the policy to the specific bucket and its objects.
 data "aws_iam_policy_document" "lambda_s3_crud" {
   statement {
     sid = "S3Crud"
@@ -104,11 +116,14 @@ data "aws_iam_policy_document" "lambda_s3_crud" {
   }
 }
 
+# Attach the inline policy to the Lambda's IAM role.
 resource "aws_iam_role_policy" "lambda_s3_crud" {
   name   = "${local.function_name}-s3-crud"
   role   = aws_iam_role.lambda_exec.id
   policy = data.aws_iam_policy_document.lambda_s3_crud.json
 }
+
+# Note: aws_iam_role_policy_attachment is used for managed policies, while aws_iam_role_policy is used for inline policies (policy that lives inside the role itself).
 
 # -----------------------------------------------------------------------------
 # CloudWatch log group
