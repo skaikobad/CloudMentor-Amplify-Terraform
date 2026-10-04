@@ -7,3 +7,16 @@ openai_api_key = "sk-proj-your-real-key-or-leave-placeholder-for-mock"
 openai_model   = "gpt-4.1-mini"
 ai_mode        = "mock" # "openai" or "mock"
 cors_origin    = "https://main.YOUR_AMPLIFY_APP_ID.amplifyapp.com"
+
+# --------------------------------------------------------------------------
+# Note: You cannot use terraform.tfvars to declare a variable.
+# terraform.tfvars only assigns values to variables that have already
+# been declared in a variable block somewhere in your Terraform configuration 
+# (usually variables.tf, but it can be any .tf file).
+#
+# Variable Precedence:
+# -var / -var-file flags on the command line (Highest)
+# terraform.tfvars files (if they exist) (Medium)
+# TF_VAR_* env variables (Medium) Terraform automatically reads env vars prefixed with TF_VAR_ and treats them as variables.
+# Variables declared in the configuration with default (Lowest)
+# --------------------------------------------------------------------------
