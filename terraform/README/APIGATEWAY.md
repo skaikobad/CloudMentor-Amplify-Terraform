@@ -182,11 +182,11 @@ Client (browser)
 
 ## TL;DR
 
-1. `**aws_apigatewayv2_api**`           → defines the API + CORS
-2. `**aws_apigatewayv2_stage**`         → makes it reachable on `$default` URL
-3. `**aws_lambda_permission**`          → lets API Gateway actually call the Lambda
-4. `**aws_apigatewayv2_integration**`   → (next) wires a route to the Lambda
-5. `**aws_apigatewayv2_route**`         → (next) maps HTTP method+path → integration
+1. `aws_apigatewayv2_api`           → defines the API + CORS
+2. `aws_apigatewayv2_stage`         → makes it reachable on `$default` URL
+3. `aws_lambda_permission`          → lets API Gateway actually call the Lambda
+4. `aws_apigatewayv2_integration`   → (next) wires a route to the Lambda
+5. `aws_apigatewayv2_route`         → (next) maps HTTP method+path → integration
 
 *Together, these five resources form the full "browser → API Gateway → Lambda" path.*
 
