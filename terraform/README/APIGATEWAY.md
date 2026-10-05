@@ -147,7 +147,7 @@ Without this, API Gateway would hit your Lambda and get `AccessDeniedException` 
 - `action = "lambda:InvokeFunction"` → The permission being granted. It does not grant `UpdateFunctionCode`, `DeleteFunction`, or any other power — just invoke.
 - `function_name` → **which** Lambda. This is required — it's how AWS knows which Lambda to grant permission to.
 - `principal = "apigateway.amazonaws.com"` → **who** gets permission (the API Gateway service). This is required — it's how AWS knows the service (not a specific user/role) is calling.
-- **Note**: this alone would let any API Gateway in any AWS account invoke your Lambda — which is why source_arn exists. 👇
+- **⚠️ Important:**: This alone would let any API Gateway in any AWS account invoke your Lambda — which is why source_arn exists. 👇
 - `source_arn` → **which** API Gateway can invoke it. Only allow calls from this specific API.
   - `"${...execution_arn}/*/*"` = wildcard for "*any stage, any route*" of this specific API. So only *your* API Gateway can trigger *your* Lambda — not someone else's.
   - The two `*`s mean: `/{stage}/{route}` → any stage, any method/path.
@@ -182,11 +182,11 @@ Client (browser)
 
 ## TL;DR
 
-1. **aws_apigatewayv2_api**           → defines the API + CORS
-2. **aws_apigatewayv2_stage**         → makes it reachable on `$default` URL
-3. **aws_lambda_permission**          → lets API Gateway actually call the Lambda
-4. **aws_apigatewayv2_integration**   → (next) wires a route to the Lambda
-5. **aws_apigatewayv2_route**         → (next) maps HTTP method+path → integration
+1. `**aws_apigatewayv2_api**`           → defines the API + CORS
+2. `**aws_apigatewayv2_stage**`         → makes it reachable on `$default` URL
+3. `**aws_lambda_permission**`          → lets API Gateway actually call the Lambda
+4. `**aws_apigatewayv2_integration**`   → (next) wires a route to the Lambda
+5. `**aws_apigatewayv2_route**`         → (next) maps HTTP method+path → integration
 
 *Together, these five resources form the full "browser → API Gateway → Lambda" path.*
 
