@@ -1,12 +1,13 @@
 # -----------------------------------------------------------------------------
 # HTTP API (equivalent of AWS::Serverless::HttpApi)
+# CORS (Cross-Origin Resource Sharing) is a browser security rule
 # -----------------------------------------------------------------------------
 resource "aws_apigatewayv2_api" "cloudmentor_http_api" {
   name          = "${var.stack_name}-http-api"
   protocol_type = "HTTP"
 
   cors_configuration {
-    allow_origins = [var.cors_origin]
+    allow_origins = [var.cors_origin] # Who is allowed to call this API from a browser?
     allow_headers = [
       "Content-Type",
       "Authorization",
@@ -39,7 +40,6 @@ resource "aws_apigatewayv2_integration" "lambda" {
 
 resource "aws_apigatewayv2_route" "routes" {
   for_each = local.routes
-
   api_id    = aws_apigatewayv2_api.cloudmentor_http_api.id
   route_key = "${each.value.method} ${each.value.path}"
   target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
