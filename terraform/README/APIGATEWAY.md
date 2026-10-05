@@ -36,10 +36,17 @@ cors_configuration {
 - `allow_origins` → only your frontend URL (e.g. `https://myapp.com`) may call this API.
 - `allow_headers` → which request headers are allowed. Includes `Content-Type`, `Authorization`, and some AWS signing headers (`x-amz-*`).
 - `allow_methods` → which HTTP verbs are allowed: GET, POST, PUT, OPTIONS.
-  - `OPTIONS` is required — browsers send a preflight OPTIONS request before real requests.
-- `max_age = 600` → browsers can cache the CORS preflight result for **600 seconds** (10 min), reducing extra requests.
+  - `GET` = read data.
+  - `POST` = create data.
+  - `PUT` = update data.
+  - `OPTIONS` is required — Browsers automatically send an OPTIONS request (preflight request) before any real requests.
+- `max_age = 600` → How long can the browser cache the CORS permission? **600 seconds** (10 min), reducing extra requests. After the browser gets a successful preflight response, it remembers the rules for 10 minutes and skips the OPTIONS check on subsequent calls.
 
-**Analogy:** This is like a bouncer at a club who has a guest list — only requests from your frontend domain are let in.
+**Quick Analogy:** 
+  - `allow_origins` = "Who can come to my house?"
+  - `allow_headers` = "What can you bring with you?"
+  - `allow_methods` = "What can you do when you get here?"
+  - `max_age` = "How long can you stay?"
 
 ---
 
@@ -54,8 +61,11 @@ resource "aws_apigatewayv2_stage" "default" {
 ```
 
 - In API Gateway, a **stage** is a named deployment environment (like `dev`, `prod`, `v1`).
-- `name = "$default"` → the special default stage.
-- With `$default`, your URL is short: `https://abc123.execute-api.us-east-1.amazonaws.com/` (no `/dev/` prefix).
+- `name = "$default"` → is a special built-in stage in API Gateway v2.
+- **Its superpower: it removes the stage name from the URL.**
+- Named stage `prod` → `https://abc123.execute-api.us-east-1.amazonaws.com/prod/users`.
+- Default stage → `https://abc123.execute-api.us-east-1.amazonaws.com/users`. (No /`prod`/ or `/dev/` prefix)
+- This makes your API URLs cleaner and lets you use a custom domain (e.g., `api.myapp.com/users`) without mapping a stage path.
 - `auto_deploy = true` → whenever routes or integrations change, redeploy automatically. No manual "deploy" step needed.
 
 ---
@@ -128,12 +138,17 @@ resource "aws_lambda_permission" "apigw_invoke" {
 }
 ```
 
-**Why is this needed?** By default, AWS blocks *everyone* from invoking your Lambda. Even API Gateway. You have to explicitly say "yes, API Gateway may call this Lambda."
+**Why is this needed?** 
+By default, Lambda functions can't be invoked by other AWS services unless you explicitly grant them permission. This resource creates a resource-based policy on your Lambda that says: "API Gateway is allowed to call me."
 
-- `action = "lambda:InvokeFunction"` → the permission being granted.
-- `principal = "apigateway.amazonaws.com"` → **who** gets permission (the API Gateway service).
-- `function_name` → **which** Lambda.
-- `source_arn` → **which** API Gateway can invoke it.
+Without this, API Gateway would hit your Lambda and get `AccessDeniedException` — your routes would return 500 errors.
+
+- `statement_id = "AllowAPIGatewayInvoke"` → A human-readable label for the policy statement. Must be unique per Lambda function — if you add another permission for the same function, use a different `statement_id`.
+- `action = "lambda:InvokeFunction"` → The permission being granted. It does not grant `UpdateFunctionCode`, `DeleteFunction`, or any other power — just invoke.
+- `function_name` → **which** Lambda. This is required — it's how AWS knows which Lambda to grant permission to.
+- `principal = "apigateway.amazonaws.com"` → **who** gets permission (the API Gateway service). This is required — it's how AWS knows the service (not a specific user/role) is calling.
+- **Note**: this alone would let any API Gateway in any AWS account invoke your Lambda — which is why source_arn exists. 👇
+- `source_arn` → **which** API Gateway can invoke it. Only allow calls from this specific API.
   - `"${...execution_arn}/*/*"` = wildcard for "*any stage, any route*" of this specific API. So only *your* API Gateway can trigger *your* Lambda — not someone else's.
   - The two `*`s mean: `/{stage}/{route}` → any stage, any method/path.
 
@@ -165,28 +180,14 @@ Client (browser)
 
 ---
 
-## Mapping to SAM (from the comments)
-
-If you came from AWS SAM, here's the translation:
-
-| SAM (in `template.yaml`)          | Terraform equivalent (this file)         |
-|-----------------------------------|------------------------------------------|
-| `AWS::Serverless::HttpApi`        | `aws_apigatewayv2_api` + `_stage`        |
-| `Events: HttpApi: path/method`    | `aws_apigatewayv2_route`                 |
-| Implicit Lambda integration       | `aws_apigatewayv2_integration`           |
-| Implicit invoke permission        | `aws_lambda_permission`                  |
-| Auto CORS config                  | `cors_configuration` block               |
-
-SAM hides all of this behind a few lines. Terraform makes you write each piece explicitly — that's the trade-off for more control and predictability.
-
----
-
 ## TL;DR
 
-1. **Create the API** (`aws_apigatewayv2_api`) with CORS.
-2. **Create the stage** (`$default`) so it's live at a URL.
-3. **Wire the Lambda** via a proxy integration.
-4. **Define routes** (from `local.routes`) that all hit that one Lambda.
-5. **Grant Lambda invoke permission** to API Gateway — scoped to your API only.
+1. **aws_apigatewayv2_api**           → defines the API + CORS
+2. **aws_apigatewayv2_stage**         → makes it reachable on `$default` URL
+3. **aws_lambda_permission**          → lets API Gateway actually call the Lambda
+4. **aws_apigatewayv2_integration**   → (next) wires a route to the Lambda
+5. **aws_apigatewayv2_route**         → (next) maps HTTP method+path → integration
+
+*Together, these five resources form the full "browser → API Gateway → Lambda" path.*
 
 That's the whole story of `apigateway.tf`. 🎯
